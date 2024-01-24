@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import websockets
 import logging
 import db
@@ -9,10 +10,9 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
 
 psql = db.db()
-
+connections = set()
 users = {}
 messages = []
-
 
 def try_parse(raw: str) -> tuple:
     try:
@@ -31,6 +31,40 @@ async def send(websocket: websockets.WebSocketClientProtocol, command: str, data
     await websocket.send(json.dumps(payload))
 
 
+def broadcast(command: str, data: dict | None):
+    payload = {"command": command}
+    if data:
+        payload.update(data)
+    message = json.dumps(payload)
+
+    websockets.broadcast(connections, message)
+
+
+def add_user(user: dict, websocket:websockets.WebSocketClientProtocol):
+    connections.add(websocket)
+    print(user)
+    users[user.get("id")] = user
+    broadcast("USER_JOIN", {"name":user.get("username"), "id":user.get("id")})
+
+
+def remove_user(id: int, websocket:websockets.WebSocketClientProtocol):
+    if websocket in connections:
+        connections.remove(websocket)
+    if not id in users:
+        return False
+    data = users[id]
+    broadcast("USER_LEAVE", {"name":data.get("username"), "id":data.get("id")})
+    del users[id]
+    return True
+
+
+def add_message(content, user):
+    message = {"message":content, "from": user.get("username"), "at": datetime.datetime.utcnow().isoformat()+"Z"}
+    messages.append(message)
+    if len(messages) > 10:
+        messages.pop(0)
+    broadcast("MESSAGE_ADD", message)
+
 async def authConnection(websocket: websockets.WebSocketClientProtocol):
     try:
         # We assume the data recv'd is an auth command with token
@@ -39,43 +73,55 @@ async def authConnection(websocket: websockets.WebSocketClientProtocol):
         print(f"<<< {raw}")
         command, data = try_parse(raw)
         if not data or not command:
-            Exception("Bad data payload")
+            raise Exception("Bad data payload")
         token = data.get("token")
         if not token:
-            Exception("Bad data payload")
+            raise Exception("Bad data payload")
 
         verified = tokens.check_token(token)
         print(token, "->", verified)
-        if not verified:
-            Exception("token verification failed")
-        await handleChat(websocket)
+        if not verified or not verified.get("id"):
+            raise Exception("token verification failed")
+        user = db.get_user(verified.get("id"), psql)
+        print(user)
+        if not user or "id" not in user or "username" not in user:
+            raise Exception("user lookup failed")
+        add_user(user, websocket)
+        await handleChat(websocket, user)
     except Exception as e:
+        logger.exception(e)
         return None
 
 
-async def handleChat(websocket: websockets.WebSocketClientProtocol):
+async def handleChat(websocket: websockets.WebSocketClientProtocol, user: dict):
     while websocket.open:
         try:
             raw = await websocket.recv()
             command, data = try_parse(raw)
             if not data or not command:
-                Exception("Bad data payload")
-
-            response = f"Server received command {command}!"
-
-            await websocket.send(response)
-            await asyncio.sleep(0)
-            print(f">>> {response}")
-        except websockets.ConnectionClosed as e:
-            logging.warning("socket closed")
+                raise Exception("Bad data payload")
+            
+            if command == "SEND_MESSAGE":
+                add_message(data.get("message"), user)
+            elif command == "REFRESH":
+                # TODO send refresh payload
+                print(data)
+            else:
+                logging.warning("Unsupported command %s", command)
         except Exception as e2:
             print(e2)
             await send(websocket, "ERROR", {"message": str(e2)})
+    # After loop
+    remove_user(user.get("id"), websocket)
 
 
 async def main():
-    async with websockets.serve(authConnection, "localhost", 8765):
-        await asyncio.Future()  # run forever
+    global server
+    stop = asyncio.Future()  # set this future to exit the server
+
+    server = await websockets.serve(authConnection, "localhost", 8765)
+    await stop
+    await server.close()
 
 if __name__ == "__main__":
     asyncio.run(main(), debug=True)

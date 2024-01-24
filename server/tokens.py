@@ -20,7 +20,7 @@ def store_token(id: int, username: str) -> str:
     return token
 
 
-def check_token(token: str) -> str | None:
+def check_token(token: str) -> dict | None:
     try:
         data = jwt.decode(token, SCRT, algorithms=["HS256"])
         print("decoded", data)

@@ -21,7 +21,7 @@ def get_user(id: int, psql):
             cur.execute("SELECT id, username FROM Users WHERE id=%s LIMIT 1",
                         (id,))
             data = cur.fetchone()
-            if not data or len(data)!=2:
+            if not data or len(data) != 2:
                 raise Exception("bad data")
             id, username = data
             return {"username": username, "id": id}
