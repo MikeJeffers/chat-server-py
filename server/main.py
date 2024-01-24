@@ -6,7 +6,7 @@ import db
 import json
 import tokens
 logger = logging.getLogger('websockets')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
 
 psql = db.db()
@@ -120,7 +120,7 @@ async def handleChat(websocket: websockets.WebSocketClientProtocol, user: dict):
 
 async def main():
     stop = asyncio.Future()
-    server = await websockets.serve(authConnection, "localhost", 8078)
+    server = await websockets.serve(authConnection, "0.0.0.0", 8078)
     await stop
     await server.close()
 
