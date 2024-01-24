@@ -1,0 +1,9 @@
+.dockerignore
+Dockerfile
+.git
+.gitignore
+.npmrc
+.env
+__pycache__/
+venv/
+.vscode/
