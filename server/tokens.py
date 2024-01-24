@@ -14,12 +14,6 @@ SCRT = os.getenv('SECRET_JWT', "idk")
 red = redis.Redis(host=HOST, port=PORT, password=PW, decode_responses=True)
 
 
-def store_token(id: int, username: str) -> str:
-    token = jwt.encode({"id": f"{id}", "username": username}, SCRT, algorithm="HS256")
-    red.setex(f"jwt:{id}", timedelta(hours=1), token)
-    return token
-
-
 def check_token(token: str) -> dict | None:
     try:
         data = jwt.decode(token, SCRT, algorithms=["HS256"])

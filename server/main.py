@@ -14,6 +14,7 @@ connections = set()
 users = {}
 messages = []
 
+
 def try_parse(raw: str) -> tuple:
     try:
         data = json.loads(raw)
@@ -40,30 +41,38 @@ def broadcast(command: str, data: dict | None):
     websockets.broadcast(connections, message)
 
 
-def add_user(user: dict, websocket:websockets.WebSocketClientProtocol):
+def add_user(user: dict, websocket: websockets.WebSocketClientProtocol):
     connections.add(websocket)
     print(user)
     users[user.get("id")] = user
-    broadcast("USER_JOIN", {"name":user.get("username"), "id":user.get("id")})
+    broadcast("USER_JOIN", {"name": user.get(
+        "username"), "id": user.get("id")})
 
 
-def remove_user(id: int, websocket:websockets.WebSocketClientProtocol):
+def remove_user(id: int, websocket: websockets.WebSocketClientProtocol):
     if websocket in connections:
         connections.remove(websocket)
     if not id in users:
         return False
     data = users[id]
-    broadcast("USER_LEAVE", {"name":data.get("username"), "id":data.get("id")})
+    broadcast("USER_LEAVE", {"name": data.get(
+        "username"), "id": data.get("id")})
     del users[id]
     return True
 
 
+def get_all_users():
+    return [{"id": u.get("id"), "name": u.get("username")} for _, u in users.items()]
+
+
 def add_message(content, user):
-    message = {"message":content, "from": user.get("username"), "at": datetime.datetime.utcnow().isoformat()+"Z"}
+    message = {"message": content, "from": user.get(
+        "username"), "at": datetime.datetime.utcnow().isoformat()+"Z"}
     messages.append(message)
     if len(messages) > 10:
         messages.pop(0)
     broadcast("MESSAGE_ADD", message)
+
 
 async def authConnection(websocket: websockets.WebSocketClientProtocol):
     try:
@@ -87,6 +96,7 @@ async def authConnection(websocket: websockets.WebSocketClientProtocol):
         if not user or "id" not in user or "username" not in user:
             raise Exception("user lookup failed")
         add_user(user, websocket)
+        await send(websocket, "ACK", {"messages": messages, "users": get_all_users()})
         await handleChat(websocket, user)
     except Exception as e:
         logger.exception(e)
@@ -100,12 +110,11 @@ async def handleChat(websocket: websockets.WebSocketClientProtocol, user: dict):
             command, data = try_parse(raw)
             if not data or not command:
                 raise Exception("Bad data payload")
-            
+
             if command == "SEND_MESSAGE":
                 add_message(data.get("message"), user)
             elif command == "REFRESH":
-                # TODO send refresh payload
-                print(data)
+                await send(websocket, "ACK", {"messages": messages, "users": get_all_users()})
             else:
                 logging.warning("Unsupported command %s", command)
         except Exception as e2:
