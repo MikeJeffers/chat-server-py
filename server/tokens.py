@@ -17,9 +17,7 @@ red = redis.Redis(host=HOST, port=PORT, password=PW, decode_responses=True)
 def check_token(token: str) -> dict | None:
     try:
         data = jwt.decode(token, SCRT, algorithms=["HS256"])
-        print("decoded", data)
         id = data.get("id", -1)
-        print("id", id)
         value = red.get(f"jwt:{id}")
         if value == token and value is not None:
             return data

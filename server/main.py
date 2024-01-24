@@ -6,7 +6,7 @@ import db
 import json
 import tokens
 logger = logging.getLogger('websockets')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
 psql = db.db()
@@ -37,13 +37,11 @@ def broadcast(command: str, data: dict | None):
     if data:
         payload.update(data)
     message = json.dumps(payload)
-
     websockets.broadcast(connections, message)
 
 
 def add_user(user: dict, websocket: websockets.WebSocketClientProtocol):
     connections.add(websocket)
-    print(user)
     users[user.get("id")] = user
     broadcast("USER_JOIN", {"name": user.get(
         "username"), "id": user.get("id")})
@@ -71,7 +69,7 @@ def add_message(content, user):
     messages.append(message)
     if len(messages) > 10:
         messages.pop(0)
-    broadcast("MESSAGE_ADD", message)
+    broadcast("MESSAGE_ADD", {"message":message})
 
 
 async def authConnection(websocket: websockets.WebSocketClientProtocol):
@@ -79,7 +77,6 @@ async def authConnection(websocket: websockets.WebSocketClientProtocol):
         # We assume the data recv'd is an auth command with token
         # any violation in these assertions will bail and close the connection
         raw = await websocket.recv()
-        print(f"<<< {raw}")
         command, data = try_parse(raw)
         if not data or not command:
             raise Exception("Bad data payload")
@@ -88,11 +85,9 @@ async def authConnection(websocket: websockets.WebSocketClientProtocol):
             raise Exception("Bad data payload")
 
         verified = tokens.check_token(token)
-        print(token, "->", verified)
         if not verified or not verified.get("id"):
             raise Exception("token verification failed")
         user = db.get_user(verified.get("id"), psql)
-        print(user)
         if not user or "id" not in user or "username" not in user:
             raise Exception("user lookup failed")
         add_user(user, websocket)
@@ -118,19 +113,16 @@ async def handleChat(websocket: websockets.WebSocketClientProtocol, user: dict):
             else:
                 logging.warning("Unsupported command %s", command)
         except Exception as e2:
-            print(e2)
             await send(websocket, "ERROR", {"message": str(e2)})
     # After loop
     remove_user(user.get("id"), websocket)
 
 
 async def main():
-    global server
-    stop = asyncio.Future()  # set this future to exit the server
-
-    server = await websockets.serve(authConnection, "localhost", 8765)
+    stop = asyncio.Future()
+    server = await websockets.serve(authConnection, "localhost", 8078)
     await stop
     await server.close()
 
 if __name__ == "__main__":
-    asyncio.run(main(), debug=True)
+    asyncio.run(main())
