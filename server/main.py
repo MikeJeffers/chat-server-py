@@ -43,8 +43,8 @@ def broadcast(command: str, data: dict | None):
 def add_user(user: dict, websocket: websockets.WebSocketClientProtocol):
     connections.add(websocket)
     users[user.get("id")] = user
-    broadcast("USER_JOIN", {"name": user.get(
-        "username"), "id": user.get("id")})
+    broadcast("USER_JOIN", {"user":{"name": user.get(
+        "username"), "id": user.get("id")}})
 
 
 def remove_user(id: int, websocket: websockets.WebSocketClientProtocol):
@@ -53,8 +53,8 @@ def remove_user(id: int, websocket: websockets.WebSocketClientProtocol):
     if not id in users:
         return False
     data = users[id]
-    broadcast("USER_LEAVE", {"name": data.get(
-        "username"), "id": data.get("id")})
+    broadcast("USER_LEAVE", {"user":{"name": data.get(
+        "username"), "id": data.get("id")}})
     del users[id]
     return True
 
