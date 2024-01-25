@@ -2,14 +2,12 @@ import asyncio
 import datetime
 import websockets
 import logging
-import db
 import json
 import tokens
 logger = logging.getLogger('websockets')
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
 
-psql = db.db()
 connections = set()
 users = {}
 messages = []
@@ -83,13 +81,9 @@ async def authConnection(websocket: websockets.WebSocketClientProtocol):
         token = data.get("token")
         if not token:
             raise Exception("Bad data payload")
-
-        verified = tokens.check_token(token)
-        if not verified or not verified.get("id"):
+        user = tokens.check_token(token)
+        if not user or not user.get("id") or not user.get("username"):
             raise Exception("token verification failed")
-        user = db.get_user(verified.get("id"), psql)
-        if not user or "id" not in user or "username" not in user:
-            raise Exception("user lookup failed")
         add_user(user, websocket)
         await send(websocket, "ACK", {"messages": messages, "users": get_all_users()})
         await handleChat(websocket, user)
